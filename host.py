@@ -1,13 +1,30 @@
+import sys
+print(sys.executable)
+
 import socket
 import pygame
 import json
 import random
+
+#host ip sini bulma
+def get_local_ip():
+    try:
+        temp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        temp_sock.connect(("8.8.8.8", 80))
+        ip = temp_sock.getsockname()[0]
+        temp_sock.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
+host_ip = get_local_ip()
 
 HOST = "0.0.0.0"
 PORT = 5555
 
 # network setup
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind((HOST, PORT))
 server.listen(3) 
 server.setblocking(False)
@@ -23,7 +40,19 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREY = (65, 69, 66)
 RED = (200, 50, 50)
+YELLOW = (255, 220, 100)
+CYAN = (0, 200, 255)
+GREEN = (0, 220, 120)
+ORANGE = (255, 170, 60)
 font = pygame.font.SysFont(None, 36)
+
+player_order = ["p2", "p3", "p4"]
+player_colors = {
+    "p1": YELLOW
+}
+
+available_colors = [CYAN, GREEN, ORANGE, RED]
+client_to_player = {}
 
 # Raket boyutları
 rect_w = 15
@@ -81,7 +110,31 @@ running = True
 print("Lobi oluşturuldu oyuncular bekleniyor")
 
 while running:
-    clock.tick(30)
+    clock.tick(35)#fps arttırdım
+    
+    # lobiye giren clientlari kabul et + artık renk random renk atama var
+    if lobby_mode:
+        try:
+            conn, addr = server.accept()
+            conn.setblocking(False)
+
+            if len(clients) < 3:
+                player_id = player_order[len(clients)]
+                color_index = random.randrange(len(available_colors))
+                chosen_color = available_colors.pop(color_index)
+
+                clients.append(conn)
+                client_to_player[conn] = player_id
+                player_colors[player_id] = chosen_color
+
+                print(f"Oyuncu eklendi: {addr} -> {player_id} renk: {chosen_color} | Toplam Oyuncu: {len(clients) + 1}")
+            else:
+                conn.close()
+
+        except BlockingIOError:
+            pass
+        except Exception as e:
+            print("Accept hatasi:", e)
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -101,17 +154,6 @@ while running:
                 lives[p] = 5 
             
             reset_ball()
-
-    # lobi girisi
-    if lobby_mode:
-        try:
-            conn, addr = server.accept()
-            conn.setblocking(False)
-            if len(clients) < 3:
-                clients.append(conn)
-                print(f"Oyuncu eklendi Toplam Oyuncu: {len(clients) + 1}")
-        except:
-            pass
 
     if not lobby_mode and not winner:
 
@@ -195,54 +237,69 @@ while running:
             ball_vel[0] = int(offset * 5)
             ball_vel[1] -= speed_on_hit
 
-    # Gamestate
+    # Gamestate + artık clientlara color bilgisi de var
     game_state = {
         "lobby": lobby_mode,
         "p_count": len(clients) + 1,
         "ball_center": (ball.centerx, ball.centery),
-        "paddles": [],
+        "paddles": {},
         "lives": lives,
-        "winner": winner
+        "winner": winner,
+        "player_colors": {pid: list(color) for pid, color in player_colors.items()}
     }
-    
-    if "p1" in active_players: game_state["paddles"].append((p1.x, p1.y, p1.width, p1.height))
-    if "p2" in active_players: game_state["paddles"].append((p2.x, p2.y, p2.width, p2.height))
-    if "p3" in active_players: game_state["paddles"].append((p3.x, p3.y, p3.width, p3.height))
-    if "p4" in active_players: game_state["paddles"].append((p4.x, p4.y, p4.width, p4.height))
+
+    if "p1" in active_players:
+        game_state["paddles"]["p1"] = (p1.x, p1.y, p1.width, p1.height)
+    if "p2" in active_players:
+        game_state["paddles"]["p2"] = (p2.x, p2.y, p2.width, p2.height)
+    if "p3" in active_players:
+        game_state["paddles"]["p3"] = (p3.x, p3.y, p3.width, p3.height)
+    if "p4" in active_players:
+        game_state["paddles"]["p4"] = (p4.x, p4.y, p4.width, p4.height)
 
     # client'a veri gonderilmesi
-    state_str = json.dumps(game_state) + "\n"
     for conn in clients:
-        try: conn.send(state_str.encode())
-        except: pass
+        try:
+            personal_state = dict(game_state)
+            personal_state["my_id"] = client_to_player.get(conn)
+            state_str = json.dumps(personal_state) + "\n"
+            conn.send(state_str.encode())
+        except:
+            pass
 
     # Ekran cizilmesi
     screen.fill(GREY)
     
     if lobby_mode:
-        text = font.render(f"LOBI: {len(clients) + 1} / 4 OYUNCU (Baslamak icin SPACE)", True, WHITE)
-        screen.blit(text, (WINDOW_SIZE//2 - 250, WINDOW_SIZE//2))
+        text1 = font.render(f"LOBI: {len(clients) + 1} / 4 OYUNCU", True, WHITE)
+        text2 = font.render("Baslamak icin SPACE", True, WHITE)
+        text3 = font.render(f"Host IP: {host_ip}", True, YELLOW)
+
+        screen.blit(text1, (WINDOW_SIZE // 2 - text1.get_width() // 2, WINDOW_SIZE // 2 - 50))
+        screen.blit(text2, (WINDOW_SIZE // 2 - text2.get_width() // 2, WINDOW_SIZE // 2))
+        screen.blit(text3, (WINDOW_SIZE // 2 - text3.get_width() // 2, WINDOW_SIZE // 2 + 50))
     elif winner:
         text = font.render(f"Oyun bitti KAZANAN: {winner.upper()}", True, RED)
         screen.blit(text, (WINDOW_SIZE//2 - 180, WINDOW_SIZE//2))
     else:
         pygame.draw.circle(screen, WHITE, ball.center, 8)
-        for p in game_state["paddles"]:
-            pygame.draw.rect(screen, WHITE, pygame.Rect(p[0], p[1], p[2], p[3]))
+        for pid, p in game_state["paddles"].items(): #renkli kutu çizme
+            color = player_colors.get(pid, WHITE)
+            pygame.draw.rect(screen, color, pygame.Rect(p[0], p[1], p[2], p[3]))
         
         # Canlarin listelenmesi
         y_offset = 20
         if "p1" in lives: 
-            screen.blit(font.render(f"P1 Can: {lives['p1']}", True, WHITE), (20, y_offset))
+            screen.blit(font.render(f"P1 Can: {lives['p1']}", True, player_colors["p1"]), (20, y_offset))
             y_offset += 30
         if "p2" in lives: 
-            screen.blit(font.render(f"P2 Can: {lives['p2']}", True, WHITE), (20, y_offset))
+            screen.blit(font.render(f"P2 Can: {lives['p2']}", True, player_colors["p2"]), (20, y_offset))
             y_offset += 30
         if "p3" in lives: 
-            screen.blit(font.render(f"P3 Can: {lives['p3']}", True, WHITE), (20, y_offset))
+            screen.blit(font.render(f"P3 Can: {lives['p3']}", True, player_colors["p3"]), (20, y_offset))
             y_offset += 30
         if "p4" in lives: 
-            screen.blit(font.render(f"P4 Can: {lives['p4']}", True, WHITE), (20, y_offset))
+            screen.blit(font.render(f"P4 Can: {lives['p4']}", True, player_colors["p4"]), (20, y_offset))
 
     pygame.display.flip()
 
