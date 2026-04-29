@@ -35,6 +35,8 @@ clock = pygame.time.Clock()
 
 state = {} 
 
+recv_buffer = ""   # Sunucudan gelen JSON verilerini parça parça toplamak için
+
 my_id = None
 my_color = WHITE
 
@@ -56,24 +58,49 @@ while running:
     if keys[pygame.K_LEFT] or keys[pygame.K_a]: msg += "L"
     if keys[pygame.K_RIGHT] or keys[pygame.K_d]: msg += "R"
     
-    if msg:
+    if connected and msg:
         try:
-            client.send(msg.encode())
-        except:
-            pass
+            client.sendall(msg.encode()) #Send i Sendall la değiştirdim daha iyi oldu (garanti)
+        except OSError as e:
+            connected = False
+            error_text = f"Veri gonderilemedi: {e}"
 
     # Gamestate verisi alinmasi + artık id ve color var
     try:
-        data = client.recv(2048)
-        if data:
-            state = json.loads(data.decode())
-            my_id = state.get("my_id")
+        data = client.recv(4096)
 
-            color_data = state.get("player_colors", {})
-            if my_id and my_id in color_data:
-                my_color = tuple(color_data[my_id])
-    except:
+        if not data:
+            connected = False
+            error_text = "Sunucu baglantiyi kapatti."
+
+        else:
+            recv_buffer += data.decode()
+
+            while "\n" in recv_buffer:
+                line, recv_buffer = recv_buffer.split("\n", 1)
+
+                if line.strip():
+                    try:
+                        state = json.loads(line)
+                        my_id = state.get("my_id")
+
+                        color_data = state.get("player_colors", {})
+                        if my_id and my_id in color_data:
+                            my_color = tuple(color_data[my_id])
+
+                    except json.JSONDecodeError:
+                        error_text = "Sunucudan bozuk veri geldi."
+
+    except BlockingIOError:
         pass
+
+    except ConnectionResetError:
+        connected = False
+        error_text = "Sunucu baglantiyi kesti."
+
+    except OSError as e:
+        connected = False
+        error_text = f"Ag hatasi: {e}"
 
     # Ekran cizilmesi
     screen.fill(GREY)
@@ -82,10 +109,12 @@ while running:
         text1 = font.render("Hosta baglanilamadi", True, RED)
         text2 = font.render(f"IP: {SERVER_IP}:{PORT}", True, WHITE)
         text3 = font.render("Host acik mi? IP dogru mu?", True, WHITE)
+        text4 = font.render(error_text, True, RED)
 
         screen.blit(text1, (WINDOW_WIDTH//2 - text1.get_width()//2, WINDOW_HEIGHT//2 - 50))
         screen.blit(text2, (WINDOW_WIDTH//2 - text2.get_width()//2, WINDOW_HEIGHT//2))
         screen.blit(text3, (WINDOW_WIDTH//2 - text3.get_width()//2, WINDOW_HEIGHT//2 + 50))
+        screen.blit(text4, (WINDOW_WIDTH//2 - text4.get_width()//2, WINDOW_HEIGHT//2 + 100))
 
         pygame.display.flip()
         continue

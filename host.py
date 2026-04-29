@@ -51,7 +51,7 @@ player_colors = {
     "p1": YELLOW
 }
 
-available_colors = [CYAN, GREEN, ORANGE, RED]
+available_colors = [CYAN, GREEN, RED]
 client_to_player = {}
 
 # Raket boyutları
@@ -78,7 +78,7 @@ winner = None
 
 # fonksiyonlar
 def reset_ball():
-    pygame.time.delay(500)
+    #pygame.time.delay(500) #clientteki delay sorununu çözmek için devre dışı bıraktım
     ball.center = (WINDOW_SIZE// 2, WINDOW_SIZE // 2)
     
     # Rastgele yön (Dikey ya da Yatay)
@@ -105,6 +105,33 @@ def take_damage(player_id):
     lives[player_id] -= 1
     if lives[player_id] <= 0:
         active_players.remove(player_id)
+        
+
+def disconnect_client(conn): # oyuncuların düştüğüne dair bildirim ayrıca duruma dair resetleme
+    pid = client_to_player.get(conn)
+    print("Client ayrildi:", pid)
+
+    if pid in active_players:
+        active_players.remove(pid)
+
+    # Oyuncu çıkınca can bilgisini de temizle
+    if pid in lives:
+        lives.pop(pid)
+
+    # Oyuncunun rengini geri renk havuzuna ekle
+    if pid in player_colors:
+        available_colors.append(player_colors[pid])
+        player_colors.pop(pid)
+
+    if conn in clients:
+        clients.remove(conn)
+
+    client_to_player.pop(conn, None)
+
+    try:
+        conn.close()
+    except OSError:
+        pass
 
 running = True
 print("Lobi oluşturuldu oyuncular bekleniyor")
@@ -163,26 +190,41 @@ while running:
             ball_vel = [0, 0]
             ball.center = (-100, -100) 
         
-        # client kontrolu
-        for i, conn in enumerate(clients):
+        # client kontrolu - artık clientlar düştüğünde diğer clientlerin kontrol ettiği raketi değişmiyor
+        for conn in clients[:]:
             try:
                 data = conn.recv(1024)
+
                 if data:
                     msg = data.decode()
-                    if i == 0 and "p2" in active_players:
-                        if "U" in msg: p2.y -= control_speed
-                        if "D" in msg: p2.y += control_speed
+                    pid = client_to_player.get(conn)
+
+                    if pid == "p2" and "p2" in active_players:
+                        if "U" in msg:
+                            p2.y -= control_speed
+                        if "D" in msg:
+                            p2.y += control_speed
                         clamp_paddle(p2, True)
-                    elif i == 1 and "p3" in active_players:
-                        if "L" in msg: p3.x -= control_speed
-                        if "R" in msg: p3.x += control_speed
+
+                    elif pid == "p3" and "p3" in active_players:
+                        if "L" in msg:
+                            p3.x -= control_speed
+                        if "R" in msg:
+                            p3.x += control_speed
                         clamp_paddle(p3, False)
-                    elif i == 2 and "p4" in active_players:
-                        if "L" in msg: p4.x -= control_speed
-                        if "R" in msg: p4.x += control_speed
+
+                    elif pid == "p4" and "p4" in active_players:
+                        if "L" in msg:
+                            p4.x -= control_speed
+                        if "R" in msg:
+                            p4.x += control_speed
                         clamp_paddle(p4, False)
-            except:
+
+            except BlockingIOError:
                 pass
+
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+                disconnect_client(conn)
         
         # Host kontrolu
         if "p1" in active_players:
@@ -258,14 +300,15 @@ while running:
         game_state["paddles"]["p4"] = (p4.x, p4.y, p4.width, p4.height)
 
     # client'a veri gonderilmesi
-    for conn in clients:
+    for conn in clients[:]:
         try:
             personal_state = dict(game_state)
             personal_state["my_id"] = client_to_player.get(conn)
             state_str = json.dumps(personal_state) + "\n"
-            conn.send(state_str.encode())
-        except:
-            pass
+            conn.sendall(state_str.encode())
+
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+            disconnect_client(conn)
 
     # Ekran cizilmesi
     screen.fill(GREY)
