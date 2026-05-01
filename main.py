@@ -40,21 +40,17 @@ while running:
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_w, pygame.K_UP):
                     selected = (selected - 1) % len(menu_options)
-
                 elif event.key in (pygame.K_s, pygame.K_DOWN):
                     selected = (selected + 1) % len(menu_options)
-
                 elif event.key == pygame.K_RETURN:
                     choice = menu_options[selected]
 
                     if choice == "HOSTLA":
                         subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "host.py")])
                         running = False
-
                     elif choice == "KATIL":
                         menu_mode = "join_ip"
                         ip_text = ""
-
                     elif choice == "CIK":
                         running = False
 
@@ -62,20 +58,16 @@ while running:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     menu_mode = "main"
-
                 elif event.key == pygame.K_RETURN:
                     entered_ip = ip_text.strip()
                     if entered_ip == "":
-                        entered_ip = "localhost"
-
+                        entered_ip = "127.0.0.1" # localhost yerine garantili IP formatı
+                    
                     subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "client.py"), entered_ip])
                     running = False
-
                 elif event.key == pygame.K_BACKSPACE:
                     ip_text = ip_text[:-1]
-
                 else:
-                    # IP için izin verilen karakterler
                     if event.unicode in "0123456789.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-":
                         ip_text += event.unicode
 
@@ -113,7 +105,7 @@ while running:
         ip_surface = menu_font.render(shown_ip, True, color)
         screen.blit(ip_surface, (box.x + 15, box.y + 13))
 
-        info2 = info_font.render("Bos birakirsan localhost olur", True, GREY)
+        info2 = info_font.render("Bos birakirsan kendi pc'ne baglanir", True, GREY)
         info3 = info_font.render("ENTER = baglan | ESC = geri don", True, GREY)
 
         screen.blit(info2, (WINDOW_W // 2 - info2.get_width() // 2, 430))
