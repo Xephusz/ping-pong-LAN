@@ -7,7 +7,7 @@ import json
 import random
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-
+# Host IP'sinin alınması
 try:
     temp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     temp_sock.connect(("8.8.8.8", 80))
@@ -40,6 +40,7 @@ except:
     hit_sound = None
     print("UYARI: hit.wav dosyasi bulunamadi, oyun sessiz calisacak.")
 
+win_sound_played = False
 try:
     win_sound = pygame.mixer.Sound("win.wav")
     win_sound.set_volume(0.7)
@@ -95,7 +96,6 @@ game_state_mode = "GAME"
 
 # fonksiyonlar
 def reset_ball():
-    pygame.time.delay(1000)
     ball.center = (WINDOW_SIZE // 2, WINDOW_SIZE // 2)
 
     # Rastgele yön (Dikey ya da Yatay)
@@ -188,7 +188,7 @@ while running:
         if event.type == pygame.KEYDOWN:
             # Space ile oyunu baslatma
 
-            if event.key == pygame.K_ESCAPE and game_state_mode == "LOBBY":
+            if event.key == pygame.K_ESCAPE:
                 game_state_mode = "MENU"
                 subprocess.Popen(
                     [sys.executable, os.path.join(BASE_DIR, "main.py")]
@@ -388,8 +388,9 @@ while running:
         screen.blit(text4, (WINDOW_SIZE // 2 -
                     text4.get_width() // 2, WINDOW_SIZE // 2 + 100))
     elif winner:
-        if win_sound:
+        if win_sound and not win_sound_played:
             win_sound.play()
+            win_sound_played = True
         text = font.render(f"Oyun bitti KAZANAN: {winner.upper()}", True, RED)
         text_restart = font.render("Lobiye donmek icin ESC bas", True, WHITE)
         screen.blit(text, (WINDOW_SIZE//2 - 180, WINDOW_SIZE//2))
