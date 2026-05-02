@@ -33,7 +33,7 @@ try:
 except:
     hit_sound = None
     print("UYARI: hit.wav dosyasi bulunamadi, oyun sessiz calisacak.")
-
+win_sound_played = False
 try:
     win_sound = pygame.mixer.Sound("win.wav")
     win_sound.set_volume(0.7)
@@ -159,8 +159,9 @@ while running:
 
     # Kazanan ekrani
     elif gamestate.get("winner"):
-        if win_sound:
+        if win_sound and not win_sound_played:
             win_sound.play()
+            win_sound_played = True
         text = font.render(
             f"OYUN BITTI! KAZANAN: {gamestate['winner'].upper()}", True, RED)
         text_restart = font.render(
